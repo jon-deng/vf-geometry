@@ -1,0 +1,138 @@
+
+import sys
+import gmsh
+
+gmsh.initialize(sys.argv)
+# gmsh.model.Se
+
+MSH_VER = 2.0
+SIZE_FACTOR = 8
+
+def gen_M5(medial_angle, z_extrude=0.0, n_extrude=1):
+    """
+    Generate a mesh for the M5_CB_GA*.STEP geometry
+    """
+    gmsh.clear()
+    gmsh.model.add('main')
+
+    gmsh.option.set_string('Geometry.OCCTargetUnit', 'CM')
+    gmsh.merge(f'stp/M5_CB--GA{medial_angle:d}.STEP')
+
+    if z_extrude == 0:
+        gmsh.model.add_physical_group(2, [2], name='body')
+        gmsh.model.add_physical_group(2, [1], name='cover')
+
+        gmsh.model.add_physical_group(1, [11, 10, 9, 8, 12], name='pressure')
+        gmsh.model.add_physical_group(1, [13, 7, 1], name='fixed')
+
+        gmsh.model.add_physical_group(0, [10], name='separation-inf')
+        gmsh.model.add_physical_group(0, [9], name='separation-sup')
+
+        gmsh.model.mesh.generate(2)
+    elif z_extrude > 0:
+        out_dim_tags = gmsh.model.occ.extrude(
+            [(2, 1), (2, 2)],
+            0.0, 0.0, z_extrude,
+            [n_extrude]
+        )
+        gmsh.model.occ.synchronize()
+
+        gmsh.model.add_physical_group(3, [2], name='body')
+        gmsh.model.add_physical_group(3, [1], name='cover')
+
+        gmsh.model.add_physical_group(
+            2, [14, 13, 12, 11, 10],
+            name='pressure'
+        )
+
+        surfs_anterior = [15, 17]
+        surfs_posterior = [2, 1]
+        surfs_lateral = [3, 16, 9]
+        gmsh.model.add_physical_group(
+            2, surfs_anterior+surfs_posterior+surfs_lateral,
+            name='fixed'
+        )
+
+        gmsh.model.add_physical_group(1, [31], name='separation-inf')
+        gmsh.model.add_physical_group(1, [29], name='separation-sup')
+
+        gmsh.model.mesh.generate()
+    else:
+        raise ValueError("`z_extrude` must be > 0")
+
+    gmsh.write(f'M5_BC--GA{medial_angle:d}--DZ{z_extrude:.2f}.msh')
+
+def gen_LiEtal2020(medial_angle, z_extrude=0.0, n_extrude=1):
+    """
+    Generate a mesh for the 'LiEtal2020*.STEP' geometry
+    """
+    gmsh.clear()
+    gmsh.model.add('main')
+
+    gmsh.option.set_string('Geometry.OCCTargetUnit', 'CM')
+    gmsh.merge(f'stp/LiEtal2020--GA{medial_angle:d}.STEP')
+
+    if z_extrude == 0:
+        gmsh.model.add_physical_group(2, [1], name='body')
+
+        gmsh.model.add_physical_group(1, [1, 6, 5, 4, 3], name='pressure')
+        gmsh.model.add_physical_group(1, [2], name='fixed')
+
+        gmsh.model.add_physical_group(0, [5], name='separation-inf')
+        gmsh.model.add_physical_group(0, [4], name='separation-sup')
+
+        gmsh.model.mesh.generate(2)
+    elif z_extrude > 0:
+        out_dim_tags = gmsh.model.occ.extrude(
+            [(2, 1)],
+            0.0, 0.0, z_extrude,
+            [n_extrude]
+        )
+        gmsh.model.occ.synchronize()
+
+        gmsh.model.add_physical_group(3, [1], name='body')
+
+        gmsh.model.add_physical_group(2, [2, 7, 6, 5, 4], name='pressure')
+        gmsh.model.add_physical_group(2, [3], name='fixed')
+
+        gmsh.model.add_physical_group(1, [14], name='separation-inf')
+        gmsh.model.add_physical_group(1, [12], name='separation-sup')
+
+        gmsh.model.mesh.generate()
+    else:
+        raise ValueError("`z_extrude` must be > 0")
+
+    gmsh.write(f'LiEtal2020--GA{medial_angle:d}--DZ{z_extrude:.2f}.msh')
+
+def gen_M5_split(medial_angle, z_extrude=0, n_extrude=1):
+    """
+    Generate a mesh for the M5_CB_GA*_split.STEP geometry
+    """
+    gmsh.clear()
+    gmsh.model.add('main')
+
+    gmsh.option.set_string('Geometry.OCCTargetUnit', 'CM')
+    gmsh.merge(f'stp/M5_CB_GA{medial_angle:d}_split.STEP')
+
+    gmsh.model.add_physical_group(2, [3], name='body')
+    gmsh.model.add_physical_group(2, [1, 2], name='cover')
+
+    gmsh.model.add_physical_group(1, [6, 5, 4, 3, 15, 14], name='pressure')
+    gmsh.model.add_physical_group(1, [13, 7, 16], name='fixed')
+
+    gmsh.model.add_physical_group(0, [4], name='separation-inf')
+    gmsh.model.add_physical_group(0, [3], name='separation-mid')
+    gmsh.model.add_physical_group(0, [14], name='separation-sup')
+
+    gmsh.model.mesh.generate(2)
+    gmsh.write(f'M5_CB_GA{medial_angle:d}_split.msh')
+
+if __name__ == '__main__':
+    # for medial_angle in [0, 1, 2, 3]:
+    #     gen_M5(medial_angle)
+    #     gen_M5_split(medial_angle)
+
+    # gen_M5(0, z_extrude=0.0, n_extrude=5)
+    # gen_M5(0, z_extrude=1.0, n_extrude=5)
+    gen_M5(0, z_extrude=2.0, n_extrude=5)
+    gen_LiEtal2020(0, z_extrude=2.0, n_extrude=5)
