@@ -1,14 +1,16 @@
+"""
+Generate some standard vocal fold (VF) meshes using GMSH
+"""
+
+# from typing import
 
 import sys
+from argparse import ArgumentParser
+
 import gmsh
 
-gmsh.initialize(sys.argv)
-# gmsh.model.Se
 
-MSH_VER = 2.0
-SIZE_FACTOR = 8
-
-def gen_M5(medial_angle, z_extrude=0.0, n_extrude=1):
+def gen_M5(medial_angle: float=0.0, z_extrude: float=0.0, n_extrude: int=1):
     """
     Generate a mesh for the M5_CB_GA*.STEP geometry
     """
@@ -16,7 +18,7 @@ def gen_M5(medial_angle, z_extrude=0.0, n_extrude=1):
     gmsh.model.add('main')
 
     gmsh.option.set_string('Geometry.OCCTargetUnit', 'CM')
-    gmsh.merge(f'stp/M5_CB--GA{medial_angle:d}.STEP')
+    gmsh.merge(f'stp/M5_CB--GA{medial_angle:.0f}.STEP')
 
     if z_extrude == 0:
         gmsh.model.add_physical_group(2, [2], name='body')
@@ -60,9 +62,9 @@ def gen_M5(medial_angle, z_extrude=0.0, n_extrude=1):
     else:
         raise ValueError("`z_extrude` must be > 0")
 
-    gmsh.write(f'M5_BC--GA{medial_angle:d}--DZ{z_extrude:.2f}.msh')
+    gmsh.write(f'M5_BC--GA{medial_angle:.2f}--DZ{z_extrude:.2f}.msh')
 
-def gen_LiEtal2020(medial_angle, z_extrude=0.0, n_extrude=1):
+def gen_LiEtal2020(medial_angle: float=0.0, z_extrude: float=0.0, n_extrude: int=1):
     """
     Generate a mesh for the 'LiEtal2020*.STEP' geometry
     """
@@ -102,9 +104,9 @@ def gen_LiEtal2020(medial_angle, z_extrude=0.0, n_extrude=1):
     else:
         raise ValueError("`z_extrude` must be > 0")
 
-    gmsh.write(f'LiEtal2020--GA{medial_angle:d}--DZ{z_extrude:.2f}.msh')
+    gmsh.write(f'LiEtal2020--GA{medial_angle:.2f}--DZ{z_extrude:.2f}.msh')
 
-def gen_M5_split(medial_angle, z_extrude=0, n_extrude=1):
+def gen_M5_split(medial_angle: float=0.0, z_extrude: float=0, n_extrude: int=1):
     """
     Generate a mesh for the M5_CB_GA*_split.STEP geometry
     """
@@ -125,14 +127,41 @@ def gen_M5_split(medial_angle, z_extrude=0, n_extrude=1):
     gmsh.model.add_physical_group(0, [14], name='separation-sup')
 
     gmsh.model.mesh.generate(2)
-    gmsh.write(f'M5_CB_GA{medial_angle:d}_split.msh')
+    gmsh.write(f'M5_CB_GA{medial_angle:.2f}_split.msh')
+
 
 if __name__ == '__main__':
-    # for medial_angle in [0, 1, 2, 3]:
-    #     gen_M5(medial_angle)
-    #     gen_M5_split(medial_angle)
+    parser = ArgumentParser()
+    parser.add_argument('--geometry-name', type=str, default='M5')
+    parser.add_argument('--medial-angle', type=float, default=0.0)
+    parser.add_argument('--z-extrude', type=float, default=0.0)
+    parser.add_argument('--n-extrude', type=int, default=1)
+    parser.add_argument('--gmsh-args', type=str, default='')
+
+    clargs = parser.parse_args()
+    gmsh.initialize(clargs.gmsh_args)
+
+    ## Parse the geometry name and any geometry/meshing parameters
+    if clargs.geometry_name == 'M5':
+        gen_mesh = gen_M5
+    elif clargs.geometry_name == 'LiEtal2020':
+        gen_mesh = gen_LiEtal2020
+    elif clargs.geometry_name == 'M5Split':
+        gen_mesh = gen_M5_split
+    else:
+        raise ValueError(f"Unknown 'geometry-name', {clargs.geometry_name}")
+
+    mesh_params = {
+        'medial_angle': clargs.medial_angle,
+        'z_extrude': clargs.z_extrude,
+        'n_extrude': clargs.n_extrude
+    }
+
+    gen_mesh(**mesh_params)
+
 
     # gen_M5(0, z_extrude=0.0, n_extrude=5)
     # gen_M5(0, z_extrude=1.0, n_extrude=5)
-    gen_M5(0, z_extrude=2.0, n_extrude=5)
-    gen_LiEtal2020(0, z_extrude=2.0, n_extrude=5)
+    # gen_M5(3, z_extrude=0.0, n_extrude=5)
+    # gen_M5(3, z_extrude=1.5, n_extrude=10)
+    # gen_LiEtal2020(0, z_extrude=2.0, n_extrude=5)
