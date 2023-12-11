@@ -3,6 +3,7 @@
 *.xml
 *.h5
 *.png
+*.msh
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
