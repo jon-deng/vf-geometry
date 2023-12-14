@@ -137,9 +137,10 @@ if __name__ == '__main__':
     parser.add_argument('--z-extrude', type=float, default=0.0)
     parser.add_argument('--n-extrude', type=int, default=1)
     parser.add_argument('--gmsh-args', type=str, default='')
-
     clargs = parser.parse_args()
-    gmsh.initialize(clargs.gmsh_args.split(' '))
+
+    gmsh_args = ['gmsh'] + clargs.gmsh_args.split(' ')
+    gmsh.initialize(gmsh_args)
 
     ## Parse the geometry name and any geometry/meshing parameters
     if clargs.geometry_name == 'M5':
