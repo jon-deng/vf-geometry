@@ -9,6 +9,8 @@ from argparse import ArgumentParser
 
 import gmsh
 
+import numpy as np
+
 
 def gen_M5(medial_angle: float=0.0, z_extrude: float=0.0, n_extrude: int=1):
     """
@@ -129,6 +131,47 @@ def gen_M5_split(medial_angle: float=0.0, z_extrude: float=0, n_extrude: int=1):
     gmsh.model.mesh.generate(2)
     gmsh.write(f'M5_CB_GA{medial_angle:.2f}_split.msh')
 
+def gen_trapezoid(
+        medial_angle: float=0.0,
+        medial_surface_length: float=0.5,
+        z_extrude: float=0,
+        n_extrude: int=1
+    ):
+    gmsh.clear()
+    gmsh.model.add('main')
+
+    gmsh.option.set_string('Geometry.OCCTargetUnit', 'CM')
+
+    # Origin
+    gmsh.model.occ.add_point(0.0, 0.0, 0.0, tag=1)
+    # Superior corner at base
+    gmsh.model.occ.add_point(1.0, 0.0, 0.0, tag=2)
+    # Superior point of medial surface (apex)
+    coord_med_sup = np.array([1.0, 0.5, 0.0])
+    gmsh.model.occ.add_point(*coord_med_sup, tag=3)
+    # Inferior point of medial surface
+    DEG = np.pi/180.0
+    _dir = np.array([-1.0, -np.tan(medial_angle*DEG), 0.0])
+    unit_dir = _dir/np.linalg.norm(_dir)
+    coord_med_inf = coord_med_sup+medial_surface_length*unit_dir
+    gmsh.model.occ.add_point(*coord_med_inf, tag=4)
+
+    gmsh.model.occ.add_line(1, 2, tag=1)
+    gmsh.model.occ.add_line(2, 3, tag=2)
+    gmsh.model.occ.add_line(3, 4, tag=3)
+    gmsh.model.occ.add_line(4, 1, tag=4)
+
+    gmsh.model.occ.add_curve_loop([1, 2, 3, 4], tag=1)
+
+    gmsh.model.occ.add_plane_surface([1], tag=1)
+
+    gmsh.model.occ.synchronize()
+
+    gmsh.model.add_physical_group(2, tags=[1], tag=1, name='VocalFold')
+
+    gmsh.write("Trapezoid.geo_unrolled")
+    gmsh.model.mesh.generate(2)
+    gmsh.write(f'Trapezoid{medial_angle:.2f}.msh')
 
 if __name__ == '__main__':
     parser = ArgumentParser()
@@ -149,6 +192,8 @@ if __name__ == '__main__':
         gen_mesh = gen_LiEtal2020
     elif clargs.geometry_name == 'M5Split':
         gen_mesh = gen_M5_split
+    elif clargs.geometry_name == 'Trapezoid':
+        gen_mesh = gen_trapezoid
     else:
         raise ValueError(f"Unknown 'geometry-name', {clargs.geometry_name}")
 
