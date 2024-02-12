@@ -134,12 +134,25 @@ def gen_M5_split(medial_angle: float=0.0, z_extrude: float=0, n_extrude: int=1):
 def gen_trapezoid(
         medial_angle: float=0.0,
         medial_surface_length: float=0.5,
+        project_medial_length: bool=False,
         z_extrude: float=0,
         n_extrude: int=1
     ):
+    """
+    Return a trapezoidal VF geometry
+
+    Parameters
+    ----------
+    medial_surface_length: float
+        The length of the medial surface
+    project_medial_length: bool
+        Indicate whether the medial length is measured based on the medial
+        surface's projection on the medial plane
+    """
     gmsh.clear()
     gmsh.model.add('main')
 
+    ## Create the trapezoidal geometry
     gmsh.option.set_string('Geometry.OCCTargetUnit', 'CM')
 
     # Origin
@@ -151,9 +164,18 @@ def gen_trapezoid(
     gmsh.model.occ.add_point(*coord_med_sup, tag=3)
     # Inferior point of medial surface
     DEG = np.pi/180.0
+
     _dir = np.array([-1.0, -np.tan(medial_angle*DEG), 0.0])
-    unit_dir = _dir/np.linalg.norm(_dir)
-    coord_med_inf = coord_med_sup+medial_surface_length*unit_dir
+    if project_medial_length:
+        # If `medial_surface_length` is projected, then the medial surface
+        # direction is length 1 in the x-direction, such that multiplying by
+        # `medial_surface_length` results in the right projected length
+        medial_surf_dir = _dir
+    else:
+        # If it's not projected, however, then the medial surface direction has
+        # unit length
+        medial_surf_dir = _dir/np.linalg.norm(_dir)
+    coord_med_inf = coord_med_sup + medial_surface_length*medial_surf_dir
     gmsh.model.occ.add_point(*coord_med_inf, tag=4)
 
     gmsh.model.occ.add_line(1, 2, tag=1)
@@ -167,11 +189,14 @@ def gen_trapezoid(
 
     gmsh.model.occ.synchronize()
 
-    gmsh.model.add_physical_group(2, tags=[1], tag=1, name='VocalFold')
+    ## Define physical groups
+    gmsh.model.add_physical_group(2, tags=[1], tag=1, name='body')
 
-    gmsh.write("Trapezoid.geo_unrolled")
+    gmsh.model.add_physical_group(1, tags=[2, 3, 4], tag=1, name='pressure')
+    gmsh.model.add_physical_group(1, tags=[1], tag=2, name='fixed')
+
     gmsh.model.mesh.generate(2)
-    gmsh.write(f'Trapezoid{medial_angle:.2f}.msh')
+    gmsh.write(f'Trapezoid_GA{medial_angle:.2f}_Projected{project_medial_length:d}.msh')
 
 if __name__ == '__main__':
     parser = ArgumentParser()
@@ -193,7 +218,9 @@ if __name__ == '__main__':
     elif clargs.geometry_name == 'M5Split':
         gen_mesh = gen_M5_split
     elif clargs.geometry_name == 'Trapezoid':
-        gen_mesh = gen_trapezoid
+        # gen_mesh = gen_trapezoid
+        def gen_mesh(*args, **kwargs):
+            return gen_trapezoid(*args, project_medial_length=False, **kwargs)
     else:
         raise ValueError(f"Unknown 'geometry-name', {clargs.geometry_name}")
 
