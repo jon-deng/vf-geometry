@@ -12,13 +12,13 @@ import numpy as np
 
 def get_option_string(option: type):
     clscale = option.get_number('Mesh.MeshSizeFactor')
-    return f'CL{clscale:.2f}'
+    return f'CL{clscale:.2e}'
 
 def get_extrude_string(z_extrude, n_extrude):
     if z_extrude == 0:
         return f'DZ{z_extrude:.2f}'
     else:
-        return f'DZ{z_extrude:.2f}--NZ{n_extrude:d}'
+        return f'DZ{z_extrude:.2e}--NZ{n_extrude:d}'
     
 
 def gen_M5(medial_angle: float=0.0, z_extrude: float=0.0, n_extrude: int=1):
