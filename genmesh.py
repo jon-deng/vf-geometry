@@ -4,37 +4,59 @@ Generate some standard vocal fold (VF) meshes using GMSH
 
 # from typing import
 
-import sys
 from argparse import ArgumentParser
 
 import gmsh
 
 import numpy as np
 
+def get_option_string(option: type):
+    clscale = option.get_number('Mesh.MeshSizeFactor')
+    return f'CL{clscale:.2f}'
+
+def get_extrude_string(z_extrude, n_extrude):
+    if z_extrude == 0:
+        return f'DZ{z_extrude:.2f}'
+    else:
+        return f'DZ{z_extrude:.2f}--NZ{n_extrude:d}'
+    
 
 def gen_M5(medial_angle: float=0.0, z_extrude: float=0.0, n_extrude: int=1):
     """
     Generate a mesh for the M5_CB_GA*.STEP geometry
     """
+    if z_extrude < 0:
+        raise ValueError("`z_extrude` must be > 0")
+    
     gmsh.clear()
     gmsh.model.add('main')
 
     gmsh.option.set_string('Geometry.OCCTargetUnit', 'CM')
     gmsh.merge(f'stp/M5_CB--GA{medial_angle:.0f}.STEP')
 
+    medial_curve = [10]
+    inf_curve = [12, 11]
+    sup_curve = [9, 8]
     if z_extrude == 0:
         gmsh.model.add_physical_group(2, [2], name='body')
         gmsh.model.add_physical_group(2, [1], name='cover')
 
-        gmsh.model.add_physical_group(1, [11, 10, 9, 8, 12], name='pressure')
+        gmsh.model.add_physical_group(
+            1, medial_curve+inf_curve+sup_curve, 
+            name='pressure'
+        )
         gmsh.model.add_physical_group(1, [13, 7, 1], name='fixed')
 
         gmsh.model.add_physical_group(0, [10], name='separation-inf')
         gmsh.model.add_physical_group(0, [9], name='separation-sup')
 
-        gmsh.model.mesh.generate(2)
-    elif z_extrude > 0:
-        out_dim_tags = gmsh.model.occ.extrude(
+    else:
+        offset = len(gmsh.model.get_entities(dim=2))
+        _medial_surf = [n+offset for n in medial_curve]
+        _inf_surf = [n+offset for n in inf_curve]
+        _sup_surf = [n+offset for n in sup_curve]
+
+        _out_dim_tags = gmsh.model.occ.extrude(
             [(2, 1), (2, 2)],
             0.0, 0.0, z_extrude,
             [n_extrude]
@@ -59,12 +81,30 @@ def gen_M5(medial_angle: float=0.0, z_extrude: float=0.0, n_extrude: int=1):
 
         gmsh.model.add_physical_group(1, [31], name='separation-inf')
         gmsh.model.add_physical_group(1, [29], name='separation-sup')
+    
+    # Add refinement at the medial surface
+    gmsh.model.mesh.field.add('Distance', 1)
+    gmsh.model.mesh.field.setNumbers(1, "CurvesList", medial_curve)
+    gmsh.model.mesh.field.setNumber(1, "Sampling", 100)
 
-        gmsh.model.mesh.generate()
+    lc = 0.025
+    gmsh.model.mesh.field.add('Threshold', 2)
+    gmsh.model.mesh.field.setNumber(2, "InField", 1)
+    gmsh.model.mesh.field.setNumber(2, "SizeMin", lc )
+    gmsh.model.mesh.field.setNumber(2, "SizeMax", 5*lc)
+    gmsh.model.mesh.field.setNumber(2, "DistMin", 0)
+    gmsh.model.mesh.field.setNumber(2, "DistMax", 5*lc)
+
+    gmsh.model.mesh.field.setAsBackgroundMesh(2)
+
+    if z_extrude == 0:
+        gmsh.model.mesh.generate(2)
     else:
-        raise ValueError("`z_extrude` must be > 0")
+        gmsh.model.mesh.generate(3)
 
-    gmsh.write(f'M5_BC--GA{medial_angle:.2f}--DZ{z_extrude:.2f}.msh')
+    option_string = get_option_string(gmsh.option)
+    extrude_string = get_extrude_string(z_extrude, n_extrude)
+    gmsh.write(f'M5_BC--GA{medial_angle:.2f}--{extrude_string}--{option_string}.msh')
 
 def gen_LiEtal2020(medial_angle: float=0.0, z_extrude: float=0.0, n_extrude: int=1):
     """
@@ -106,7 +146,8 @@ def gen_LiEtal2020(medial_angle: float=0.0, z_extrude: float=0.0, n_extrude: int
     else:
         raise ValueError("`z_extrude` must be > 0")
 
-    gmsh.write(f'LiEtal2020--GA{medial_angle:.2f}--DZ{z_extrude:.2f}.msh')
+    option_string = get_option_string(gmsh.option)
+    gmsh.write(f'LiEtal2020--GA{medial_angle:.2f}--DZ{z_extrude:.2f}--{option_string}.msh')
 
 def gen_M5_split(medial_angle: float=0.0, z_extrude: float=0, n_extrude: int=1):
     """
@@ -129,30 +170,21 @@ def gen_M5_split(medial_angle: float=0.0, z_extrude: float=0, n_extrude: int=1):
     gmsh.model.add_physical_group(0, [14], name='separation-sup')
 
     gmsh.model.mesh.generate(2)
-    gmsh.write(f'M5_CB_GA{medial_angle:.2f}_split.msh')
+    option_string = get_option_string(gmsh.option)
+    gmsh.write(f'M5_CB_GA{medial_angle:.2f}_split--{option_string}.msh')
 
 def gen_trapezoid(
         medial_angle: float=0.0,
         medial_surface_length: float=0.5,
-        project_medial_length: bool=False,
         z_extrude: float=0,
         n_extrude: int=1
     ):
     """
-    Return a trapezoidal VF geometry
-
-    Parameters
-    ----------
-    medial_surface_length: float
-        The length of the medial surface
-    project_medial_length: bool
-        Indicate whether the medial length is measured based on the medial
-        surface's projection on the medial plane
+    Generate a mesh for a trapezoidal geometry
     """
     gmsh.clear()
     gmsh.model.add('main')
 
-    ## Create the trapezoidal geometry
     gmsh.option.set_string('Geometry.OCCTargetUnit', 'CM')
 
     # Origin
@@ -164,18 +196,9 @@ def gen_trapezoid(
     gmsh.model.occ.add_point(*coord_med_sup, tag=3)
     # Inferior point of medial surface
     DEG = np.pi/180.0
-
     _dir = np.array([-1.0, -np.tan(medial_angle*DEG), 0.0])
-    if project_medial_length:
-        # If `medial_surface_length` is projected, then the medial surface
-        # direction is length 1 in the x-direction, such that multiplying by
-        # `medial_surface_length` results in the right projected length
-        medial_surf_dir = _dir
-    else:
-        # If it's not projected, however, then the medial surface direction has
-        # unit length
-        medial_surf_dir = _dir/np.linalg.norm(_dir)
-    coord_med_inf = coord_med_sup + medial_surface_length*medial_surf_dir
+    unit_dir = _dir/np.linalg.norm(_dir)
+    coord_med_inf = coord_med_sup+medial_surface_length*unit_dir
     gmsh.model.occ.add_point(*coord_med_inf, tag=4)
 
     gmsh.model.occ.add_line(1, 2, tag=1)
@@ -189,14 +212,13 @@ def gen_trapezoid(
 
     gmsh.model.occ.synchronize()
 
-    ## Define physical groups
-    gmsh.model.add_physical_group(2, tags=[1], tag=1, name='body')
+    gmsh.model.add_physical_group(2, tags=[1], tag=1, name='VocalFold')
 
-    gmsh.model.add_physical_group(1, tags=[2, 3, 4], tag=1, name='pressure')
-    gmsh.model.add_physical_group(1, tags=[1], tag=2, name='fixed')
-
+    gmsh.write("Trapezoid.geo_unrolled")
     gmsh.model.mesh.generate(2)
-    gmsh.write(f'Trapezoid_GA{medial_angle:.2f}_Projected{project_medial_length:d}.msh')
+
+    option_string = get_option_string(gmsh.option)
+    gmsh.write(f'Trapezoid{medial_angle:.2f}--{option_string}.msh')
 
 if __name__ == '__main__':
     parser = ArgumentParser()
@@ -218,9 +240,7 @@ if __name__ == '__main__':
     elif clargs.geometry_name == 'M5Split':
         gen_mesh = gen_M5_split
     elif clargs.geometry_name == 'Trapezoid':
-        # gen_mesh = gen_trapezoid
-        def gen_mesh(*args, **kwargs):
-            return gen_trapezoid(*args, project_medial_length=False, **kwargs)
+        gen_mesh = gen_trapezoid
     else:
         raise ValueError(f"Unknown 'geometry-name', {clargs.geometry_name}")
 
@@ -231,10 +251,3 @@ if __name__ == '__main__':
     }
 
     gen_mesh(**mesh_params)
-
-
-    # gen_M5(0, z_extrude=0.0, n_extrude=5)
-    # gen_M5(0, z_extrude=1.0, n_extrude=5)
-    # gen_M5(3, z_extrude=0.0, n_extrude=5)
-    # gen_M5(3, z_extrude=1.5, n_extrude=10)
-    # gen_LiEtal2020(0, z_extrude=2.0, n_extrude=5)
